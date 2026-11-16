@@ -1,0 +1,42 @@
+body {
+  font-family: 'Noto Sans Georgian', sans-serif;
+  background-color: #0d0907;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.font-magic {
+  font-family: 'Cinzel', 'Noto Sans Georgian', serif;
+}
+
+.glass-hud {
+  background: rgba(18, 13, 9, 0.78);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.glass-modal {
+  background: radial-gradient(circle at top, rgba(45, 29, 18, 0.96), rgba(12, 8, 6, 0.98));
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), inset 0 0 40px rgba(245, 158, 11, 0.08);
+}
+
+canvas {
+  cursor: none;
+  display: block;
+}
+
+@keyframes pulseSpell {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 12px rgba(251, 191, 36, 0.4); }
+  50% { transform: scale(1.04); box-shadow: 0 0 24px rgba(251, 191, 36, 0.9); }
+}
+
+.spell-running {
+  animation: pulseSpell 0.9s infinite;
+  border-color: #fbbf24 !important;
+}
