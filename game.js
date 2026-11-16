@@ -30,6 +30,7 @@ const THEMES = {
 
 const state = {
   running: false,
+  paused: false,
   mode: 'game',
   theme: 'hall',
   level: 1,
@@ -43,6 +44,7 @@ const state = {
   combo: 0,
   comboTimer: 0,
   shakeTime: 0,
+  bounds: { top: 96, bottom: height - 86, left: 16, right: width - 16 },
   spells: {
     accio: { active: false, timer: 0, cooldown: 0, maxCd: 10 },
     ventus: { active: false, timer: 0, cooldown: 0, maxCd: 8 },
@@ -61,20 +63,36 @@ const state = {
   floatingTexts: [],
   obstacles: [],
   rug: { x: 0, y: 0, w: 0, h: 0 },
-  dustpan: { x: 0, y: 0, radius: 58 },
+  dustpan: { x: 0, y: 0, radius: 48 },
   woodPattern: null,
 };
 
+function computeSafeBounds() {
+  const hud = document.getElementById('topHud');
+  const spells = document.getElementById('spellsBar');
+
+  const topRect = hud && !hud.classList.contains('hidden') ? hud.getBoundingClientRect().bottom : 88;
+  const bottomRect =
+    spells && !spells.classList.contains('hidden') ? spells.getBoundingClientRect().top : height - 74;
+
+  state.bounds = {
+    top: Math.max(84, topRect + 12),
+    bottom: Math.min(height - 64, bottomRect - 12),
+    left: 14,
+    right: width - 14,
+  };
+}
+
 function initAmbientDust() {
   state.ambientDust = [];
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 36; i++) {
     state.ambientDust.push({
       x: Math.random() * width,
       y: Math.random() * height,
-      r: 1 + Math.random() * 2.2,
+      r: 1 + Math.random() * 2,
       vx: (Math.random() - 0.5) * 14,
       vy: -5 - Math.random() * 12,
-      alpha: 0.15 + Math.random() * 0.4,
+      alpha: 0.15 + Math.random() * 0.35,
     });
   }
 }
@@ -100,12 +118,6 @@ function createWoodFloorPattern() {
     pCtx.moveTo(0, y + 29);
     pCtx.lineTo(240, y + 29);
     pCtx.stroke();
-
-    pCtx.strokeStyle = 'rgba(255, 210, 160, 0.04)';
-    pCtx.beginPath();
-    pCtx.moveTo(0, y + 8);
-    pCtx.bezierCurveTo(80, y + 4, 160, y + 14, 240, y + 8);
-    pCtx.stroke();
   }
 
   pCtx.strokeStyle = 'rgba(10, 5, 2, 0.55)';
@@ -124,40 +136,45 @@ function createWoodFloorPattern() {
 }
 
 function setupArenaGeometry() {
-  const margin = Math.min(width, height) * 0.1;
+  computeSafeBounds();
+  const b = state.bounds;
+  const playW = b.right - b.left;
+  const playH = b.bottom - b.top;
+
+  const panRadius = Math.max(40, Math.min(playW, playH) * 0.095);
   state.dustpan = {
-    x: width - Math.max(88, margin),
-    y: height - Math.max(95, margin),
-    radius: Math.max(54, Math.min(width, height) * 0.075),
+    x: b.right - panRadius - 18,
+    y: b.bottom - panRadius - 22,
+    radius: panRadius,
   };
 
   state.rug = {
-    x: width * 0.22,
-    y: height * 0.24,
-    w: width * 0.44,
-    h: height * 0.46,
+    x: b.left + playW * 0.16,
+    y: b.top + playH * 0.18,
+    w: playW * 0.52,
+    h: playH * 0.54,
   };
 
   state.obstacles = [];
-  const count = state.mode === 'zen' ? 2 : Math.min(1 + state.level, 5);
-  const labels = ['🌿', '🪑', '🏺', '📚', '🕯️'];
+  const count = state.mode === 'zen' ? 2 : Math.min(1 + state.level, 4);
+  const labels = ['🌿', '🪑', '🏺', '📚'];
 
   for (let i = 0; i < count; i++) {
-    const radius = Math.max(28, Math.min(width, height) * 0.045);
+    const radius = Math.max(20, Math.min(playW, playH) * 0.055);
     let ox, oy, valid;
     let attempts = 0;
     do {
       valid = true;
-      ox = 110 + Math.random() * (width - 240);
-      oy = 120 + Math.random() * (height - 260);
-      if (Math.hypot(ox - state.dustpan.x, oy - state.dustpan.y) < state.dustpan.radius + radius + 80) {
+      ox = b.left + radius + 35 + Math.random() * Math.max(40, playW - radius * 2 - 90);
+      oy = b.top + radius + 35 + Math.random() * Math.max(40, playH - radius * 2 - 90);
+      if (Math.hypot(ox - state.dustpan.x, oy - state.dustpan.y) < state.dustpan.radius + radius + 55) {
         valid = false;
       }
       for (const ob of state.obstacles) {
-        if (Math.hypot(ox - ob.x, oy - ob.y) < radius + ob.radius + 55) valid = false;
+        if (Math.hypot(ox - ob.x, oy - ob.y) < radius + ob.radius + 40) valid = false;
       }
       attempts++;
-    } while (!valid && attempts < 30);
+    } while (!valid && attempts < 35);
 
     state.obstacles.push({
       x: ox,
@@ -168,19 +185,23 @@ function setupArenaGeometry() {
   }
 
   state.cobwebs = [
-    { x: 42, y: 105, hp: 100 },
-    { x: width - 42, y: 105, hp: 100 },
-    { x: 42, y: height - 95, hp: 100 },
+    { x: b.left + 26, y: b.top + 26, hp: 100 },
+    { x: b.right - 26, y: b.top + 26, hp: 100 },
+    { x: b.left + 26, y: b.bottom - 26, hp: 100 },
   ];
 }
 
 function spawnMess(trashCount, stainCount) {
+  const b = state.bounds;
+  const playW = Math.max(120, b.right - b.left - 60);
+  const playH = Math.max(120, b.bottom - b.top - 60);
+
   const types = [
     { kind: 'dust', color: '#a8a29e', radius: 6, mass: 0.7, points: 10 },
-    { kind: 'leaf', color: '#ea580c', radius: 10, mass: 1.0, points: 15 },
-    { kind: 'leafGold', color: '#eab308', radius: 9, mass: 0.9, points: 15 },
-    { kind: 'paper', color: '#f8fafc', radius: 11, mass: 1.35, points: 25 },
-    { kind: 'candy', color: '#ec4899', radius: 8, mass: 1.15, points: 30 },
+    { kind: 'leaf', color: '#ea580c', radius: 9, mass: 1.0, points: 15 },
+    { kind: 'leafGold', color: '#eab308', radius: 8.5, mass: 0.9, points: 15 },
+    { kind: 'paper', color: '#f8fafc', radius: 10, mass: 1.35, points: 25 },
+    { kind: 'candy', color: '#ec4899', radius: 7.5, mass: 1.15, points: 30 },
   ];
 
   for (let i = 0; i < trashCount; i++) {
@@ -189,21 +210,21 @@ function spawnMess(trashCount, stainCount) {
     let tries = 0;
     do {
       ok = true;
-      px = 65 + Math.random() * (width - 150);
-      py = 105 + Math.random() * (height - 210);
-      if (Math.hypot(px - state.dustpan.x, py - state.dustpan.y) < state.dustpan.radius + 50) ok = false;
+      px = b.left + 30 + Math.random() * playW;
+      py = b.top + 30 + Math.random() * playH;
+      if (Math.hypot(px - state.dustpan.x, py - state.dustpan.y) < state.dustpan.radius + 36) ok = false;
       for (const ob of state.obstacles) {
-        if (Math.hypot(px - ob.x, py - ob.y) < ob.radius + 25) ok = false;
+        if (Math.hypot(px - ob.x, py - ob.y) < ob.radius + 20) ok = false;
       }
       tries++;
-    } while (!ok && tries < 25);
+    } while (!ok && tries < 30);
 
     state.particles.push({
       x: px,
       y: py,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: (Math.random() - 0.5) * 1.5,
-      radius: spec.radius + (Math.random() * 2 - 1),
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: (Math.random() - 0.5) * 1.4,
+      radius: spec.radius + (Math.random() * 1.5 - 0.75),
       mass: spec.mass,
       color: spec.color,
       kind: spec.kind,
@@ -219,19 +240,19 @@ function spawnMess(trashCount, stainCount) {
     let tries = 0;
     do {
       ok = true;
-      sx = 100 + Math.random() * (width - 220);
-      sy = 125 + Math.random() * (height - 250);
-      if (Math.hypot(sx - state.dustpan.x, sy - state.dustpan.y) < state.dustpan.radius + 70) ok = false;
+      sx = b.left + 45 + Math.random() * Math.max(80, playW - 30);
+      sy = b.top + 45 + Math.random() * Math.max(80, playH - 30);
+      if (Math.hypot(sx - state.dustpan.x, sy - state.dustpan.y) < state.dustpan.radius + 55) ok = false;
       for (const ob of state.obstacles) {
-        if (Math.hypot(sx - ob.x, sy - ob.y) < ob.radius + 45) ok = false;
+        if (Math.hypot(sx - ob.x, sy - ob.y) < ob.radius + 35) ok = false;
       }
       tries++;
-    } while (!ok && tries < 25);
+    } while (!ok && tries < 30);
 
     state.stains.push({
       x: sx,
       y: sy,
-      radius: 26 + Math.random() * 10,
+      radius: 22 + Math.random() * 8,
       hp: 100,
       color: stainColors[j % stainColors.length],
     });
@@ -242,17 +263,18 @@ function spawnMess(trashCount, stainCount) {
 }
 
 function spawnGoldenSnitch() {
+  const b = state.bounds;
   state.snitch = {
-    x: 120 + Math.random() * (width - 240),
-    y: 120 + Math.random() * (height - 260),
-    vx: (Math.random() > 0.5 ? 1 : -1) * 155,
-    vy: (Math.random() > 0.5 ? 1 : -1) * 120,
+    x: b.left + (b.right - b.left) * 0.4,
+    y: b.top + (b.bottom - b.top) * 0.4,
+    vx: (Math.random() > 0.5 ? 1 : -1) * 145,
+    vy: (Math.random() > 0.5 ? 1 : -1) * 115,
     wingPhase: 0,
   };
 }
 
 function castSpell(name) {
-  if (!state.running) return;
+  if (!state.running || state.paused) return;
   const sp = state.spells[name];
   if (!sp || sp.cooldown > 0 || sp.active) return;
 
@@ -263,26 +285,26 @@ function castSpell(name) {
     sp.active = true;
     sp.timer = 3.2;
     sp.cooldown = sp.maxCd;
-    addFloatingText(state.dustpan.x, state.dustpan.y - 45, '🪄 ACCIO!', '#fbbf24');
+    addFloatingText(state.dustpan.x, state.dustpan.y - 35, '🪄 ACCIO!', '#fbbf24');
   } else if (name === 'ventus') {
     sp.cooldown = sp.maxCd;
     const b = state.broom;
-    state.shockwaves.push({ x: b.x, y: b.y, radius: 15, maxRadius: 240, alpha: 1 });
-    addFloatingText(b.x, b.y - 35, '🌪️ VENTUS!', '#38bdf8');
+    state.shockwaves.push({ x: b.x, y: b.y, radius: 15, maxRadius: 230, alpha: 1 });
+    addFloatingText(b.x, b.y - 30, '🌪️ VENTUS!', '#38bdf8');
 
     for (const pt of state.particles) {
       const dx = pt.x - b.x;
       const dy = pt.y - b.y;
       const dist = Math.hypot(dx, dy) || 1;
-      if (dist < 260) {
-        const force = (1 - dist / 260) * 26;
+      if (dist < 250) {
+        const force = (1 - dist / 250) * 25;
         pt.vx += (dx / dist) * force;
         pt.vy += (dy / dist) * force;
       }
     }
     for (let i = state.stains.length - 1; i >= 0; i--) {
       const st = state.stains[i];
-      if (Math.hypot(st.x - b.x, st.y - b.y) < 200) {
+      if (Math.hypot(st.x - b.x, st.y - b.y) < 190) {
         st.hp -= 60;
         if (st.hp <= 0) {
           state.stains.splice(i, 1);
@@ -295,13 +317,13 @@ function castSpell(name) {
     sp.active = true;
     sp.timer = 4.5;
     sp.cooldown = sp.maxCd;
-    addFloatingText(state.broom.x, state.broom.y - 40, '☀️ LUMOS MAXIMA!', '#fde047');
+    addFloatingText(state.broom.x, state.broom.y - 35, '☀️ LUMOS!', '#fde047');
   } else if (name === 'geminio') {
     sp.active = true;
     sp.timer = 6.0;
     sp.cooldown = sp.maxCd;
     document.getElementById('doubleScoreBadge').classList.remove('hidden');
-    addFloatingText(state.broom.x, state.broom.y - 40, '💎 2X ქულები!', '#c084fc');
+    addFloatingText(state.broom.x, state.broom.y - 35, '💎 2X ქულები!', '#c084fc');
   }
 }
 
@@ -332,6 +354,7 @@ function initSession(mode, level = 1) {
   state.combo = 0;
   state.broom.trail = [];
   state.running = true;
+  state.paused = false;
 
   Object.values(state.spells).forEach((s) => {
     s.active = false;
@@ -346,20 +369,21 @@ function initSession(mode, level = 1) {
     document.getElementById('themeSelect').value = state.theme;
   }
 
-  createWoodFloorPattern();
-  setupArenaGeometry();
-
-  const trashCount = mode === 'zen' ? 45 : 26 + level * 10;
-  const stainCount = mode === 'zen' ? 3 : Math.min(2 + level, 6);
-  spawnMess(trashCount, stainCount);
-  spawnGoldenSnitch();
-
   document.getElementById('welcomeModal').classList.add('hidden');
   document.getElementById('resultModal').classList.add('hidden');
   document.getElementById('topHud').classList.remove('hidden');
   document.getElementById('spellsBar').classList.remove('hidden');
   document.getElementById('highScoreText').textContent = state.highScore.toLocaleString();
   document.getElementById('themeNameLabel').textContent = THEMES[state.theme].name;
+
+  createWoodFloorPattern();
+  setupArenaGeometry();
+
+  const isMobile = width < 640;
+  const trashCount = mode === 'zen' ? (isMobile ? 32 : 45) : (isMobile ? 18 + level * 6 : 26 + level * 10);
+  const stainCount = mode === 'zen' ? 2 : Math.min(2 + level, isMobile ? 4 : 6);
+  spawnMess(trashCount, stainCount);
+  spawnGoldenSnitch();
 
   const levelBadge = document.getElementById('levelBadge');
   const timerBox = document.getElementById('timerBox');
@@ -409,15 +433,15 @@ function updateHUD() {
     if (sp.active) {
       btn.classList.add('spell-running');
       st.textContent = `${sp.timer.toFixed(1)}s`;
-      st.className = 'text-[10px] text-amber-300 font-extrabold';
+      st.className = 'text-[9px] text-amber-300 font-extrabold';
     } else if (sp.cooldown > 0) {
       btn.classList.remove('spell-running');
       st.textContent = `${Math.ceil(sp.cooldown)}s`;
-      st.className = 'text-[10px] text-white/45 font-semibold';
+      st.className = 'text-[9px] text-white/45 font-semibold';
     } else {
       btn.classList.remove('spell-running');
       st.textContent = 'მზადაა';
-      st.className = 'text-[10px] text-emerald-300 font-semibold';
+      st.className = 'text-[9px] text-emerald-300 font-semibold';
     }
   }
 }
@@ -456,11 +480,12 @@ function updatePhysics(dt) {
     if (d.x > width) d.x = 0;
   }
 
-  if (!state.running) return;
+  if (!state.running || state.paused) return;
 
   if (state.shakeTime > 0) state.shakeTime = Math.max(0, state.shakeTime - dt);
 
   const timeScale = state.spells.lumos.active ? 0.45 : 1.0;
+  const bounds = state.bounds;
 
   if (state.mode === 'game') {
     state.timeLeft -= dt * timeScale;
@@ -515,8 +540,8 @@ function updatePhysics(dt) {
   if (state.broomType === 'wizard' && speed > 2.2) {
     for (let i = 0; i < 2; i++) {
       state.sparkles.push({
-        x: b.x + (Math.random() - 0.5) * 40,
-        y: b.y + (Math.random() - 0.5) * 40,
+        x: b.x + (Math.random() - 0.5) * 38,
+        y: b.y + (Math.random() - 0.5) * 38,
         vx: (Math.random() - 0.5) * 2.2,
         vy: (Math.random() - 0.5) * 2.2 - 0.6,
         life: 1,
@@ -538,10 +563,10 @@ function updatePhysics(dt) {
     s.x += s.vx * dt * timeScale;
     s.y += s.vy * dt * timeScale + Math.sin(s.wingPhase * 0.25) * 1.5;
 
-    if (s.x < 75 || s.x > width - 75) s.vx *= -1;
-    if (s.y < 105 || s.y > height - 95) s.vy *= -1;
+    if (s.x < bounds.left + 20 || s.x > bounds.right - 20) s.vx *= -1;
+    if (s.y < bounds.top + 20 || s.y > bounds.bottom - 20) s.vy *= -1;
 
-    if (Math.hypot(s.x - b.x, s.y - b.y) < 58) {
+    if (Math.hypot(s.x - b.x, s.y - b.y) < 54) {
       state.shakeTime = 0.2;
       if (state.mode === 'game') state.timeLeft += 5;
       audio.playCollectChime(14);
@@ -560,13 +585,13 @@ function updatePhysics(dt) {
     }
   }
 
-  const broomRadius = state.broomType === 'wizard' ? 56 : state.broomType === 'modern' ? 50 : 45;
+  const broomRadius = state.broomType === 'wizard' ? 52 : state.broomType === 'modern' ? 46 : 42;
   const sweepPower = state.broomType === 'wizard' ? 1.35 : 1.1;
 
   for (let i = state.stains.length - 1; i >= 0; i--) {
     const st = state.stains[i];
-    if (Math.hypot(st.x - b.x, st.y - b.y) < broomRadius + st.radius * 0.6 && speed > 1.5) {
-      const polishRate = state.broomType === 'wizard' ? 95 : 70;
+    if (Math.hypot(st.x - b.x, st.y - b.y) < broomRadius + st.radius * 0.6 && speed > 1.2) {
+      const polishRate = state.broomType === 'wizard' ? 95 : 75;
       st.hp -= polishRate * dt;
       if (Math.random() < 0.25) {
         state.sparkles.push({
@@ -589,8 +614,8 @@ function updatePhysics(dt) {
 
   for (let i = state.cobwebs.length - 1; i >= 0; i--) {
     const cw = state.cobwebs[i];
-    if (Math.hypot(cw.x - b.x, cw.y - b.y) < broomRadius + 30 && speed > 2) {
-      cw.hp -= 160 * dt;
+    if (Math.hypot(cw.x - b.x, cw.y - b.y) < broomRadius + 32 && speed > 1.5) {
+      cw.hp -= 170 * dt;
       if (cw.hp <= 0) {
         state.cobwebs.splice(i, 1);
         state.completedTasks++;
@@ -607,8 +632,8 @@ function updatePhysics(dt) {
       const dx = state.dustpan.x - pt.x;
       const dy = state.dustpan.y - pt.y;
       const dist = Math.hypot(dx, dy) || 1;
-      pt.vx += (dx / dist) * 0.72;
-      pt.vy += (dy / dist) * 0.72;
+      pt.vx += (dx / dist) * 0.75;
+      pt.vy += (dy / dist) * 0.75;
     }
 
     const distBroom = Math.hypot(pt.x - b.x, pt.y - b.y);
@@ -645,19 +670,18 @@ function updatePhysics(dt) {
     pt.rotation += pt.vRot;
     pt.vRot *= 0.92;
 
-    const pad = pt.radius + 14;
-    if (pt.x < pad) {
-      pt.x = pad;
+    if (pt.x < bounds.left + pt.radius) {
+      pt.x = bounds.left + pt.radius;
       pt.vx *= -0.6;
-    } else if (pt.x > width - pad) {
-      pt.x = width - pad;
+    } else if (pt.x > bounds.right - pt.radius) {
+      pt.x = bounds.right - pt.radius;
       pt.vx *= -0.6;
     }
-    if (pt.y < 80 + pt.radius) {
-      pt.y = 80 + pt.radius;
+    if (pt.y < bounds.top + pt.radius) {
+      pt.y = bounds.top + pt.radius;
       pt.vy *= -0.6;
-    } else if (pt.y > height - 75 - pt.radius) {
-      pt.y = height - 75 - pt.radius;
+    } else if (pt.y > bounds.bottom - pt.radius) {
+      pt.y = bounds.bottom - pt.radius;
       pt.vy *= -0.6;
     }
 
@@ -678,11 +702,11 @@ function updatePhysics(dt) {
 
     const distPan = Math.hypot(pt.x - state.dustpan.x, pt.y - state.dustpan.y);
     if (distPan < state.dustpan.radius * 1.45) {
-      pt.vx += (state.dustpan.x - pt.x) * 0.09;
-      pt.vy += (state.dustpan.y - pt.y) * 0.09;
+      pt.vx += (state.dustpan.x - pt.x) * 0.095;
+      pt.vy += (state.dustpan.y - pt.y) * 0.095;
     }
 
-    if (distPan < state.dustpan.radius * 0.76) {
+    if (distPan < state.dustpan.radius * 0.78) {
       state.particles.splice(i, 1);
       state.completedTasks++;
       state.combo++;
@@ -695,7 +719,7 @@ function updatePhysics(dt) {
 
       const praise = state.combo === 5 ? ' 🔥 სერია!' : state.combo === 10 ? ' ⚡ მაგიური!' : '';
       addFloatingText(
-        state.dustpan.x + (Math.random() - 0.5) * 34,
+        state.dustpan.x + (Math.random() - 0.5) * 30,
         state.dustpan.y - 25,
         state.combo > 2 ? `+${gained} (x${state.combo})${praise}` : `+${gained}`,
         mult > 1 ? '#e879f9' : '#fde047'
@@ -758,6 +782,13 @@ function drawScene() {
     ctx.fillRect(0, 0, width, height);
   }
 
+  const bnd = state.bounds;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(251, 191, 36, 0.16)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(bnd.left, bnd.top, bnd.right - bnd.left, bnd.bottom - bnd.top);
+  ctx.restore();
+
   const themeCfg = THEMES[state.theme];
   const r = state.rug;
   ctx.save();
@@ -769,11 +800,8 @@ function drawScene() {
   ctx.fill();
 
   ctx.strokeStyle = themeCfg.rugBorder;
-  ctx.lineWidth = 4;
-  ctx.strokeRect(r.x + 12, r.y + 12, r.w - 24, r.h - 24);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(r.x + 20, r.y + 20, r.w - 40, r.h - 40);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(r.x + 10, r.y + 10, r.w - 20, r.h - 20);
   ctx.restore();
 
   for (const st of state.stains) {
@@ -801,7 +829,7 @@ function drawScene() {
     ctx.globalAlpha = Math.max(0.2, cw.hp / 100);
     ctx.strokeStyle = 'rgba(241, 245, 249, 0.65)';
     ctx.lineWidth = 1.5;
-    for (let ring = 12; ring <= 44; ring += 11) {
+    for (let ring = 10; ring <= 36; ring += 9) {
       ctx.beginPath();
       ctx.arc(cw.x, cw.y, ring, 0, Math.PI * 2);
       ctx.stroke();
@@ -809,7 +837,7 @@ function drawScene() {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
       ctx.beginPath();
       ctx.moveTo(cw.x, cw.y);
-      ctx.lineTo(cw.x + Math.cos(a) * 46, cw.y + Math.sin(a) * 46);
+      ctx.lineTo(cw.x + Math.cos(a) * 38, cw.y + Math.sin(a) * 38);
       ctx.stroke();
     }
     ctx.restore();
@@ -820,10 +848,10 @@ function drawScene() {
   ctx.translate(dp.x, dp.y);
 
   if (state.spells.accio.active) {
-    const wave = (performance.now() * 0.08) % 90;
+    const wave = (performance.now() * 0.08) % 85;
     ctx.beginPath();
     ctx.arc(0, 0, dp.radius + wave, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(251, 191, 36, ${1 - wave / 90})`;
+    ctx.strokeStyle = `rgba(251, 191, 36, ${1 - wave / 85})`;
     ctx.lineWidth = 3;
     ctx.stroke();
   }
@@ -849,19 +877,19 @@ function drawScene() {
 
   ctx.fillStyle = '#f59e0b';
   ctx.beginPath();
-  ctx.roundRect(dp.radius * 0.55, -7, 36, 14, 6);
+  ctx.roundRect(dp.radius * 0.55, -6, 28, 12, 5);
   ctx.fill();
 
   ctx.fillStyle = '#a7f3d0';
-  ctx.font = 'bold 11px "Noto Sans Georgian", sans-serif';
+  ctx.font = 'bold 10px "Noto Sans Georgian", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('აქანდაზი', 0, dp.radius + 18);
+  ctx.fillText('აქანდაზი', 0, dp.radius + 14);
   ctx.restore();
 
   for (const ob of state.obstacles) {
     ctx.save();
     ctx.beginPath();
-    ctx.arc(ob.x, ob.y + 5, ob.radius, 0, Math.PI * 2);
+    ctx.arc(ob.x, ob.y + 4, ob.radius, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fill();
 
@@ -870,7 +898,7 @@ function drawScene() {
     ctx.fillStyle = '#291d16';
     ctx.fill();
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.font = `${Math.round(ob.radius * 1.1)}px serif`;
@@ -945,7 +973,7 @@ function drawScene() {
     ctx.shadowBlur = 18;
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
-    ctx.arc(0, 0, 9, 0, Math.PI * 2);
+    ctx.arc(0, 0, 8.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -953,7 +981,7 @@ function drawScene() {
   const effectiveDarkness = state.spells.lumos.active ? 0 : themeCfg.darkness;
   if (effectiveDarkness > 0) {
     const b = state.broom;
-    const nightGrad = ctx.createRadialGradient(b.x, b.y, 70, b.x, b.y, 260);
+    const nightGrad = ctx.createRadialGradient(b.x, b.y, 65, b.x, b.y, 240);
     nightGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
     nightGrad.addColorStop(1, `rgba(4, 3, 10, ${effectiveDarkness})`);
     ctx.fillStyle = nightGrad;
@@ -974,7 +1002,7 @@ function drawScene() {
     ctx.globalAlpha = Math.max(0, sp.life);
     ctx.fillStyle = sp.color;
     ctx.beginPath();
-    ctx.arc(sp.x, sp.y, 3.2, 0, Math.PI * 2);
+    ctx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -982,7 +1010,7 @@ function drawScene() {
   for (const ft of state.floatingTexts) {
     ctx.save();
     ctx.globalAlpha = Math.max(0, ft.life);
-    ctx.font = '800 15px "Noto Sans Georgian", sans-serif';
+    ctx.font = '800 14px "Noto Sans Georgian", sans-serif';
     ctx.fillStyle = ft.color;
     ctx.textAlign = 'center';
     ctx.fillText(ft.text, ft.x, ft.y);
@@ -1000,7 +1028,7 @@ function drawBroom() {
     const tr = b.trail[i];
     ctx.save();
     ctx.beginPath();
-    ctx.arc(tr.x, tr.y, (i / b.trail.length) * 28, 0, Math.PI * 2);
+    ctx.arc(tr.x, tr.y, (i / b.trail.length) * 24, 0, Math.PI * 2);
     ctx.fillStyle =
       state.broomType === 'wizard'
         ? `rgba(251, 191, 36, ${tr.alpha * 0.28})`
@@ -1015,7 +1043,7 @@ function drawBroom() {
   ctx.translate(b.x, b.y);
   ctx.rotate(b.angle);
 
-  const radius = state.broomType === 'wizard' ? 56 : state.broomType === 'modern' ? 50 : 45;
+  const radius = state.broomType === 'wizard' ? 52 : state.broomType === 'modern' ? 46 : 42;
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.strokeStyle =
@@ -1028,16 +1056,16 @@ function drawBroom() {
   ctx.stroke();
 
   ctx.shadowColor = 'rgba(0,0,0,0.65)';
-  ctx.shadowBlur = 14;
-  ctx.shadowOffsetY = 8;
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 6;
 
   if (state.broomType === 'wizard') {
-    const handleGrad = ctx.createLinearGradient(-5, -135, 5, 0);
+    const handleGrad = ctx.createLinearGradient(-5, -120, 5, 0);
     handleGrad.addColorStop(0, '#451a03');
     handleGrad.addColorStop(1, '#92400e');
     ctx.fillStyle = handleGrad;
     ctx.beginPath();
-    ctx.roundRect(-4.5, -135, 9, 125, 5);
+    ctx.roundRect(-4.5, -120, 9, 110, 5);
     ctx.fill();
 
     ctx.fillStyle = '#fbbf24';
@@ -1047,44 +1075,35 @@ function drawBroom() {
     ctx.beginPath();
     ctx.moveTo(-8, -10);
     ctx.lineTo(8, -10);
-    ctx.lineTo(26, 36);
-    ctx.quadraticCurveTo(0, 44, -26, 36);
+    ctx.lineTo(24, 34);
+    ctx.quadraticCurveTo(0, 42, -24, 34);
     ctx.closePath();
     ctx.fill();
-
-    ctx.strokeStyle = '#fde68a';
-    ctx.lineWidth = 1.2;
-    for (let bx = -18; bx <= 18; bx += 6) {
-      ctx.beginPath();
-      ctx.moveTo(bx * 0.35, -8);
-      ctx.lineTo(bx, 35);
-      ctx.stroke();
-    }
   } else if (state.broomType === 'modern') {
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
-    ctx.roundRect(-4, -130, 8, 120, 4);
+    ctx.roundRect(-4, -115, 8, 105, 4);
     ctx.fill();
 
     ctx.fillStyle = '#0f172a';
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(-34, -10, 68, 22, 8);
+    ctx.roundRect(-32, -10, 64, 20, 8);
     ctx.fill();
     ctx.stroke();
   } else {
     ctx.fillStyle = '#a16207';
     ctx.beginPath();
-    ctx.roundRect(-4, -130, 8, 118, 4);
+    ctx.roundRect(-4, -115, 8, 103, 4);
     ctx.fill();
 
     ctx.fillStyle = '#eab308';
     ctx.beginPath();
     ctx.moveTo(-12, -12);
     ctx.lineTo(12, -12);
-    ctx.lineTo(28, 30);
-    ctx.lineTo(-28, 30);
+    ctx.lineTo(26, 28);
+    ctx.lineTo(-26, 28);
     ctx.closePath();
     ctx.fill();
 
@@ -1141,26 +1160,14 @@ window.addEventListener('resize', () => {
   setupArenaGeometry();
 });
 
-document.querySelectorAll('.broom-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const selected = btn.getAttribute('data-broom');
-    state.broomType = selected;
-    document.querySelectorAll('.broom-btn').forEach((b) => {
-      if (b.getAttribute('data-broom') === selected) {
-        b.classList.add('bg-amber-500', 'text-black', 'font-bold');
-        b.classList.remove('text-amber-200/75');
-      } else {
-        b.classList.remove('bg-amber-500', 'text-black', 'font-bold');
-        b.classList.add('text-amber-200/75');
-      }
-    });
-  });
-});
-
 document.getElementById('themeSelect').addEventListener('change', (e) => {
   state.theme = e.target.value;
   document.getElementById('themeNameLabel').textContent = THEMES[state.theme].name;
   createWoodFloorPattern();
+});
+
+document.getElementById('broomSelect').addEventListener('change', (e) => {
+  state.broomType = e.target.value;
 });
 
 document.getElementById('spellAccio').addEventListener('click', () => castSpell('accio'));
@@ -1170,10 +1177,26 @@ document.getElementById('spellGeminio').addEventListener('click', () => castSpel
 
 document.getElementById('startGameModeBtn').addEventListener('click', () => initSession('game', 1));
 document.getElementById('startZenModeBtn').addEventListener('click', () => initSession('zen', 1));
-document.getElementById('zenScatterBtn').addEventListener('click', () => spawnMess(22, 2));
+document.getElementById('zenScatterBtn').addEventListener('click', () => spawnMess(18, 2));
 document.getElementById('restartBtn').addEventListener('click', () => initSession(state.mode, state.level));
 document.getElementById('retryLevelBtn').addEventListener('click', () => initSession(state.mode, state.level));
 document.getElementById('nextLevelBtn').addEventListener('click', () => initSession('game', state.level + 1));
+
+function openHelpModal() {
+  state.paused = true;
+  audio.updateSweep(0, state.broomType);
+  document.getElementById('helpModal').classList.remove('hidden');
+}
+
+function closeHelpModal() {
+  state.paused = false;
+  document.getElementById('helpModal').classList.add('hidden');
+}
+
+document.getElementById('helpBtn').addEventListener('click', openHelpModal);
+document.getElementById('openGuideFromWelcomeBtn').addEventListener('click', openHelpModal);
+document.getElementById('closeHelpBtn').addEventListener('click', closeHelpModal);
+document.getElementById('gotItHelpBtn').addEventListener('click', closeHelpModal);
 
 document.getElementById('menuBtn').addEventListener('click', () => {
   state.running = false;
